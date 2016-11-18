@@ -766,7 +766,9 @@ class DisabledBackend(BaseBackend):
         pass
 
     def ensure_chords_allowed(self):
-        raise NotImplementedError(E_CHORD_NO_BACKEND.strip())
+        # Mathias Baur: disabled exception because it is always raised even if a Redis backend is available (Windows Redis issue?)
+        #raise NotImplementedError(E_CHORD_NO_BACKEND.strip())
+        pass
 
     def _is_disabled(self, *args, **kwargs):
         raise NotImplementedError(E_NO_BACKEND.strip())
