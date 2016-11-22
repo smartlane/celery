@@ -39,7 +39,7 @@ class Callable(object):
         return val
 
 
-a_signal = Signal(providing_args=['val'], use_caching=False)
+a_signal = Signal(providing_args=['val'])
 
 
 class test_Signal:
