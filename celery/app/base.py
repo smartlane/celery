@@ -261,7 +261,7 @@ class Celery(object):
         self._pending = deque()
         self._tasks = tasks
         if not isinstance(self._tasks, TaskRegistry):
-            self._tasks = TaskRegistry(self._tasks or {})
+            self._tasks = self.registry_cls(self._tasks or {})
 
         # If the class defines a custom __reduce_args__ we need to use
         # the old way of pickling apps: pickling a list of
@@ -476,6 +476,23 @@ class Celery(object):
                 task._orig_run, task.run = task.run, run
         else:
             task = self._tasks[name]
+        return task
+
+    def register_task(self, task):
+        """Utility for registering a task-based class.
+
+        Note:
+            This is here for compatibility with old Celery 1.0
+            style task classes, you should not need to use this for
+            new projects.
+        """
+        if not task.name:
+            task_cls = type(task)
+            task.name = self.gen_task_name(
+                task_cls.__name__, task_cls.__module__)
+        self.tasks[task.name] = task
+        task._app = self
+        task.bind(self)
         return task
 
     def gen_task_name(self, name, module):
@@ -853,7 +870,8 @@ class Celery(object):
 
     def now(self):
         """Return the current time and date as a datetime."""
-        return self.loader.now(utc=self.conf.enable_utc)
+        from datetime import datetime
+        return datetime.utcnow().replace(tzinfo=self.timezone)
 
     def select_queues(self, queues=None):
         """Select subset of queues.
@@ -1214,6 +1232,10 @@ class Celery(object):
     def producer_pool(self):
         return self.amqp.producer_pool
 
+    def uses_utc_timezone(self):
+        """Check if the application uses the UTC timezone."""
+        return self.conf.timezone == 'UTC' or self.conf.timezone is None
+
     @cached_property
     def timezone(self):
         """Current timezone for this app.
@@ -1222,9 +1244,12 @@ class Celery(object):
         :setting:`timezone` setting.
         """
         conf = self.conf
-        tz = conf.timezone
+        tz = conf.timezone or 'UTC'
         if not tz:
-            return (timezone.get_timezone('UTC') if conf.enable_utc
-                    else timezone.local)
-        return timezone.get_timezone(conf.timezone)
-App = Celery  # compat
+            if conf.enable_utc:
+                return timezone.get_timezone('UTC')
+            else:
+                if not conf.timezone:
+                    return timezone.local
+        return timezone.get_timezone(tz)
+App = Celery  # noqa: E305 XXX compat

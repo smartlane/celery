@@ -1,6 +1,7 @@
 from __future__ import absolute_import, unicode_literals
 
 import pytest
+import socket
 
 from datetime import datetime, timedelta
 
@@ -118,6 +119,12 @@ class TasksCase:
             return a / b
 
         self.autoretry_task = autoretry_task
+
+        @self.app.task(bind=True)
+        def task_check_request_context(self):
+            assert self.request.hostname == socket.gethostname()
+
+        self.task_check_request_context = task_check_request_context
 
         # memove all messages from memory-transport
         from kombu.transport.memory import Channel
@@ -241,6 +248,16 @@ class test_task_retries(TasksCase):
     def test_autoretry(self):
         self.autoretry_task.max_retries = 3
         self.autoretry_task.iterations = 0
+        self.autoretry_task.apply((1, 0))
+        assert self.autoretry_task.iterations == 6
+
+    def test_retry_wrong_eta_when_not_enable_utc(self):
+        """Issue #3753"""
+        self.app.conf.enable_utc = False
+        self.app.conf.timezone = 'US/Eastern'
+        self.autoretry_task.iterations = 0
+        self.autoretry_task.default_retry_delay = 2
+
         self.autoretry_task.apply((1, 0))
         assert self.autoretry_task.iterations == 6
 
@@ -591,6 +608,10 @@ class test_apply_task(TasksCase):
         self.app.conf.task_eager_propagates = True
         with pytest.raises(KeyError):
             self.raising.apply()
+
+    def test_apply_request_context_is_ok(self):
+        self.app.conf.task_eager_propagates = True
+        self.task_check_request_context.apply()
 
     def test_apply(self):
         self.increment_counter.count = 0

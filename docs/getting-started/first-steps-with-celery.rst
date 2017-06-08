@@ -78,7 +78,7 @@ the event of abrupt termination or power failures. Detailed information about us
 
 :ref:`broker-redis`
 
-.. _`Redis`: http://redis.io/
+.. _`Redis`: https://redis.io/
 
 Other brokers
 -------------
@@ -124,9 +124,9 @@ Let's create the file :file:`tasks.py`:
     def add(x, y):
         return x + y
 
-The first argument to :class:`~celery.app.Celery` is the name of the current module,
-this only needed so names can be automatically generated when the tasks are
-defined in the `__main__` module.
+The first argument to :class:`~celery.app.Celery` is the name of the current module.
+This is only needed to allow names to be generated automatically when the tasks are
+defined in the ``__main__`` module.
 
 The second argument is the broker keyword argument, specifying the URL of the
 message broker you want to use. Here using RabbitMQ (also the default option).

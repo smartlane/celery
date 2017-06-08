@@ -32,6 +32,7 @@ class wrapobject(object):
     def __init__(self, *args, **kwargs):
         self.args = args
 
+
 if sys.version_info[0] == 3 or getattr(sys, 'pypy_version_info', None):
     Oldstyle = None
 else:
@@ -137,6 +138,11 @@ class test_prepare_exception:
         assert isinstance(x, KeyError)
         y = self.b.exception_to_python(x)
         assert isinstance(y, KeyError)
+
+    def test_unicode_message(self):
+        message = u'\u03ac'
+        x = self.b.prepare_exception(Exception(message))
+        assert x == {'exc_message': message, 'exc_type': 'Exception'}
 
 
 class KVBackend(KeyValueStoreBackend):
@@ -356,19 +362,25 @@ class test_KeyValueStoreBackend:
             ids = {uuid(): i for i in range(10)}
             for id, i in items(ids):
                 self.b.mark_as_done(id, i)
-            it = self.b.get_many(list(ids))
+            it = self.b.get_many(list(ids), interval=0.01)
             for i, (got_id, got_state) in enumerate(it):
                 assert got_state['result'] == ids[got_id]
             assert i == 9
-            assert list(self.b.get_many(list(ids)))
+            assert list(self.b.get_many(list(ids), interval=0.01))
 
             self.b._cache.clear()
             callback = Mock(name='callback')
-            it = self.b.get_many(list(ids), on_message=callback)
+            it = self.b.get_many(
+                list(ids),
+                on_message=callback,
+                interval=0.05
+            )
             for i, (got_id, got_state) in enumerate(it):
                 assert got_state['result'] == ids[got_id]
             assert i == 9
-            assert list(self.b.get_many(list(ids)))
+            assert list(
+                self.b.get_many(list(ids), interval=0.01)
+            )
             callback.assert_has_calls([
                 call(ANY) for id in ids
             ])

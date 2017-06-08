@@ -38,7 +38,7 @@ as...
    a :sig:`SIGSEGV` (segmentation fault) or similar signals to the process.
 #. We assume that a system administrator deliberately killing the task
    does not want it to automatically restart.
-#. A task that allocates to much memory is in danger of triggering the kernel
+#. A task that allocates too much memory is in danger of triggering the kernel
    OOM killer, the same may happen again.
 #. A task that always fails when redelivered may cause a high-frequency
    message loop taking down the system.
@@ -66,10 +66,10 @@ consider enabling the :setting:`task_reject_on_worker_lost` setting.
 
     The default prefork pool scheduler is not friendly to long-running tasks,
     so if you have tasks that run for minutes/hours make sure you enable
-    the -Ofair`` command-line argument to the :program:`celery worker`.
-    See :ref:`prefork-pool-prefetch` for more information, and for the
-    best performance route long-running and short-running tasks to
-    dedicated workers (:ref:`routing-automatic`).
+    the :option:`-Ofair <celery worker -O>` command-line argument to
+    the :program:`celery worker`. See :ref:`prefork-pool-prefetch` for more
+    information, and for the best performance route long-running and
+    short-running tasks to dedicated workers (:ref:`routing-automatic`).
 
     If your worker hangs then please investigate what tasks are running
     before submitting an issue, as most likely the hanging is caused
@@ -173,7 +173,7 @@ The ``base`` argument to the task decorator specifies the base class of the task
     class MyTask(celery.Task):
 
         def on_failure(self, exc, task_id, args, kwargs, einfo):
-            print('{0!r} failed: {1!r}'.format(task_id, exc)
+            print('{0!r} failed: {1!r}'.format(task_id, exc))
 
     @task(base=MyTask)
     def add(x, y):
@@ -855,6 +855,10 @@ General
     rate limit. To enforce a global rate limit (e.g., for an API with a
     maximum number of  requests per second), you must restrict to a given
     queue.
+
+    .. note::
+
+        This attribute is ignored if the task is requested with an ETA.
 
 .. attribute:: Task.time_limit
 
@@ -1565,6 +1569,32 @@ different :func:`~celery.signature`'s.
 You can read about chains and other powerful constructs
 at :ref:`designing-workflows`.
 
+By default celery will not enable you to run tasks within task synchronously
+in rare or extreme cases you might have to do so.
+**WARNING**:
+enabling subtasks run synchronously is not recommended!
+
+.. code-block:: python
+
+    @app.task
+    def update_page_info(url):
+        page = fetch_page.delay(url).get(disable_sync_subtasks=False)
+        info = parse_page.delay(url, page).get(disable_sync_subtasks=False)
+        store_page_info.delay(url, info)
+
+    @app.task
+    def fetch_page(url):
+        return myhttplib.get(url)
+
+    @app.task
+    def parse_page(url, page):
+        return myparser.parse_document(page)
+
+    @app.task
+    def store_page_info(url, info):
+        return PageInfo.objects.create(url, info)
+
+
 .. _task-performance-and-strategies:
 
 Performance and Strategies
@@ -1714,35 +1744,23 @@ There's a race condition if the task starts executing
 before the transaction has been committed; The database object doesn't exist
 yet!
 
-The solution is to *always commit transactions before sending tasks
-depending on state from the current transaction*:
+The solution is to use the ``on_commit`` callback to launch your celery task
+once all transactions have been committed successfully.
 
 .. code-block:: python
 
-    @transaction.commit_manually
+    from django.db.transaction import on_commit
+
     def create_article(request):
-        try:
-            article = Article.objects.create()
-        except:
-            transaction.rollback()
-            raise
-        else:
-            transaction.commit()
-            expand_abbreviations.delay(article.pk)
+        article = Article.objects.create()
+        on_commit(lambda: expand_abbreviations.delay(article.pk))
 
 .. note::
-    Django 1.6 (and later) now enables autocommit mode by default,
-    and ``commit_on_success``/``commit_manually`` are deprecated.
+    ``on_commit`` is available in Django 1.9 and above, if you are using a
+    version prior to that then the `django-transaction-hooks`_ library
+    adds support for this.
 
-    This means each SQL query is wrapped and executed in individual
-    transactions, making it less likely to experience the
-    problem described above.
-
-    However, enabling ``ATOMIC_REQUESTS`` on the database
-    connection will bring back the transaction-per-request model and the
-    race condition along with it. In this case, the simple solution is
-    using the ``@transaction.non_atomic_requests`` decorator to go back
-    to autocommit for that view only.
+.. _`django-transaction-hooks`: https://github.com/carljm/django-transaction-hooks
 
 .. _task-example:
 

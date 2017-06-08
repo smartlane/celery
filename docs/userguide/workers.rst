@@ -1057,7 +1057,7 @@ This command will gracefully shut down the worker remotely:
 .. code-block:: pycon
 
     >>> app.control.broadcast('shutdown') # shutdown all workers
-    >>> app.control.broadcast('shutdown, destination='worker1@example.com')
+    >>> app.control.broadcast('shutdown', destination='worker1@example.com')
 
 .. control:: ping
 
@@ -1159,7 +1159,7 @@ for example one that reads the current prefetch count:
 
     @inspect_command
     def current_prefetch_count(state):
-    return {'prefetch_count': state.consumer.qos.value}
+        return {'prefetch_count': state.consumer.qos.value}
 
 
 After restarting the worker you can now query this value using the

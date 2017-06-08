@@ -531,8 +531,7 @@ class _chain(Signature):
         if tasks:
             if isinstance(tasks, tuple):  # aaaargh
                 tasks = d['kwargs']['tasks'] = list(tasks)
-            # First task must be signature object to get app
-            tasks[0] = maybe_signature(tasks[0], app=app)
+            tasks = [maybe_signature(task, app=app) for task in tasks]
         return _upgrade(d, _chain(tasks, app=app, **d['options']))
 
     def __init__(self, *tasks, **options):
@@ -926,9 +925,9 @@ class group(Signature):
         [4, 8]
 
     Arguments:
-        *tasks (Signature): A list of signatures that this group will call.
-            If there's only one argument, and that argument is an iterable,
-            then that'll define the list of signatures instead.
+        *tasks (List[Signature]): A list of signatures that this group will
+            call. If there's only one argument, and that argument is an
+            iterable, then that'll define the list of signatures instead.
         **options (Any): Execution options applied to all tasks
             in the group.
 
@@ -1123,9 +1122,6 @@ class group(Signature):
                                   chord=chord, root_id=root_id,
                                   parent_id=parent_id)
 
-    def __iter__(self):
-        return iter(self.tasks)
-
     def __repr__(self):
         if self.tasks:
             return remove_repeating_from_task(
@@ -1242,7 +1238,7 @@ class chord(Signature):
         if len(self.tasks) == 1:
             # chord([A], B) can be optimized as A | B
             # - Issue #3323
-            return (self.tasks[0].set(task_id=task_id) | body).apply_async(
+            return (self.tasks[0] | body).set(task_id=task_id).apply_async(
                 args, kwargs, **options)
         # chord([A, B, ...], C)
         return self.run(tasks, body, args, task_id=task_id, **options)
@@ -1256,7 +1252,7 @@ class chord(Signature):
         )
 
     def _traverse_tasks(self, tasks, value=None):
-        stack = deque(list(tasks))
+        stack = deque(tasks)
         while stack:
             task = stack.popleft()
             if isinstance(task, group):
@@ -1265,7 +1261,9 @@ class chord(Signature):
                 yield task if value is None else value
 
     def __length_hint__(self):
-        return sum(self._traverse_tasks(self.tasks, 1))
+        tasks = (self.tasks.tasks if isinstance(self.tasks, group)
+                 else self.tasks)
+        return sum(self._traverse_tasks(tasks, 1))
 
     def run(self, header, body, partial_args, app=None, interval=None,
             countdown=1, max_retries=None, eager=False,
@@ -1282,6 +1280,9 @@ class chord(Signature):
         results = header.freeze(
             group_id=group_id, chord=body, root_id=root_id).results
         bodyres = body.freeze(task_id, root_id=root_id)
+
+        # Chains should not be passed to the header tasks. See #3771
+        options.pop('chain', None)
 
         parent = app.backend.apply_chord(
             header, partial_args, group_id, body,
@@ -1338,7 +1339,8 @@ class chord(Signature):
                 tasks = self.tasks.tasks  # is a group
             except AttributeError:
                 tasks = self.tasks
-            app = tasks[0]._app
+            if len(tasks):
+                app = tasks[0]._app
             if app is None and body is not None:
                 app = body._app
         return app if app is not None else current_app
@@ -1362,7 +1364,7 @@ def signature(varies, *args, **kwargs):
             return varies.clone()
         return Signature.from_dict(varies, app=app)
     return Signature(varies, *args, **kwargs)
-subtask = signature   # XXX compat
+subtask = signature  # noqa: E305 XXX compat
 
 
 def maybe_signature(d, app=None, clone=False):
@@ -1390,5 +1392,4 @@ def maybe_signature(d, app=None, clone=False):
         if app is not None:
             d._app = app
     return d
-
-maybe_subtask = maybe_signature  # XXX compat
+maybe_subtask = maybe_signature  # noqa: E305 XXX compat

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, unicode_literals
 from time import sleep
-from celery import shared_task
+from celery import shared_task, group
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -11,6 +11,19 @@ logger = get_task_logger(__name__)
 def add(x, y):
     """Add two numbers."""
     return x + y
+
+
+@shared_task(bind=True)
+def add_replaced(self, x, y):
+    """Add two numbers (via the add task)."""
+    raise self.replace(add.s(x, y))
+
+
+@shared_task(bind=True)
+def add_to_all(self, nums, val):
+    """Add the given value to all supplied numbers."""
+    subtasks = [add.s(num, val) for num in nums]
+    raise self.replace(group(*subtasks))
 
 
 @shared_task
@@ -42,3 +55,20 @@ def collect_ids(self, res, i):
 
     """
     return res, (self.request.root_id, self.request.parent_id, i)
+
+
+@shared_task(bind=True, expires=60.0, max_retries=1)
+def retry_once(self):
+    """Task that fails and is retried. Returns the number of retries."""
+    if self.request.retries:
+        return self.request.retries
+    raise self.retry(countdown=0.1)
+
+
+@shared_task
+def redis_echo(message):
+    """Task that appends the message to a redis list"""
+    from redis import StrictRedis
+
+    redis_connection = StrictRedis()
+    redis_connection.rpush('redis-echo', message)

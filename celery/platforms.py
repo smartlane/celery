@@ -229,7 +229,7 @@ class Pidfile(object):
                     "Inconsistency: Pidfile content doesn't match at re-read")
         finally:
             rfh.close()
-PIDFile = Pidfile  # compat alias
+PIDFile = Pidfile  # noqa: E305 XXX compat alias
 
 
 def create_pidlock(pidfile):
@@ -632,9 +632,11 @@ class Signals(object):
     def supported(self, name):
         """Return true value if signal by ``name`` exists on this platform."""
         try:
-            return self.signum(name)
+            self.signum(name)
         except AttributeError:
-            pass
+            return False
+        else:
+            return True
 
     def signum(self, name):
         """Get signal number by name."""
@@ -681,6 +683,7 @@ class Signals(object):
         """Set signal handlers from a mapping."""
         for name, handler in items(dict(_d_ or {}, **sigmap)):
             self[name] = handler
+
 
 signals = Signals()
 get_signal = signals.signum                   # compat

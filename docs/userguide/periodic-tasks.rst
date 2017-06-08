@@ -105,7 +105,7 @@ that we'll not evaluate the app at module level when using ``test.s()``.
 
 The :meth:`~@add_periodic_task` function will add the entry to the
 :setting:`beat_schedule` setting behind the scenes, and the same setting
-can also can be used to set up periodic tasks manually:
+can also be used to set up periodic tasks manually:
 
 Example: Run the `tasks.add` task every 30 seconds.
 
@@ -439,7 +439,7 @@ To install and use this extension:
             'django_celery_beat',
         )
 
-    Note that there is no dash in the module name, only underscores.
+   Note that there is no dash in the module name, only underscores.
 
 #. Apply Django database migrations so that the necessary tables are created:
 

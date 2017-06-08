@@ -19,6 +19,7 @@ from celery.result import (
     AsyncResult,
     EagerResult,
     ResultSet,
+    GroupResult,
     result_from_tuple,
     assert_will_not_block,
 )
@@ -61,6 +62,14 @@ def make_mock_group(app, size=10):
     return [app.AsyncResult(task['id']) for task in tasks]
 
 
+class _MockBackend:
+    def add_pending_result(self, *args, **kwargs):
+        return True
+
+    def wait_for_pending(self, *args, **kwargs):
+        return True
+
+
 class test_AsyncResult:
 
     def setup(self):
@@ -89,6 +98,16 @@ class test_AsyncResult:
             assert_will_not_block()
         task_join_will_block.return_value = False
         assert_will_not_block()
+
+    @patch('celery.result.task_join_will_block')
+    def test_get_sync_subtask_option(self, task_join_will_block):
+        task_join_will_block.return_value = True
+        tid = uuid()
+        backend = _MockBackend()
+        res_subtask_async = AsyncResult(tid, backend=backend)
+        with pytest.raises(RuntimeError):
+            res_subtask_async.get()
+        res_subtask_async.get(disable_sync_subtasks=False)
 
     def test_without_id(self):
         with pytest.raises(ValueError):
@@ -614,6 +633,13 @@ class test_GroupResult:
         assert self.app.GroupResult.restore(ts.id) is None
         with pytest.raises(AttributeError):
             self.app.GroupResult.restore(ts.id, backend=object())
+
+    def test_restore_app(self):
+        subs = [MockAsyncResultSuccess(uuid(), app=self.app)]
+        ts = self.app.GroupResult(uuid(), subs)
+        ts.save()
+        restored = GroupResult.restore(ts.id, app=self.app)
+        assert restored.id == ts.id
 
     def test_join_native(self):
         backend = SimpleBackend()

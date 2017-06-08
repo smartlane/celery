@@ -37,7 +37,7 @@
 
 .. cmdoption:: --pidfile
 
-    Optional file used to store the process pid.
+    File used to store the process pid. Defaults to `celerybeat.pid`.
 
     The program won't start if this file already exists
     and the pid is still alive.
@@ -126,6 +126,7 @@ class beat(Command):
 
 def main(app=None):
     beat(app=app).execute_from_commandline()
+
 
 if __name__ == '__main__':      # pragma: no cover
     main()

@@ -234,11 +234,28 @@ def _argsfromspec(spec, replace_defaults=True):
         optional = list(zip(spec.args[-split:], defaults))
     else:
         positional, optional = spec.args, []
+
+    varargs = spec.varargs
+    varkw = spec.varkw
+    if spec.kwonlydefaults:
+        split = len(spec.kwonlydefaults)
+        kwonlyargs = spec.kwonlyargs[:-split]
+        if replace_defaults:
+            kwonlyargs_optional = [
+                (kw, i) for i, kw in enumerate(spec.kwonlyargs[-split:])]
+        else:
+            kwonlyargs_optional = list(spec.kwonlydefaults.items())
+    else:
+        kwonlyargs, kwonlyargs_optional = spec.kwonlyargs, []
+
     return ', '.join(filter(None, [
         ', '.join(positional),
         ', '.join('{0}={1}'.format(k, v) for k, v in optional),
-        '*{0}'.format(spec.varargs) if spec.varargs else None,
-        '**{0}'.format(spec.varkw) if spec.varkw else None,
+        '*{0}'.format(varargs) if varargs else None,
+        '*' if (kwonlyargs or kwonlyargs_optional) and not varargs else None,
+        ', '.join(kwonlyargs) if kwonlyargs else None,
+        ', '.join('{0}="{1}"'.format(k, v) for k, v in kwonlyargs_optional),
+        '**{0}'.format(varkw) if varkw else None,
     ]))
 
 
@@ -249,7 +266,11 @@ def head_from_fun(fun, bound=False, debug=False):
     # in pure-Python.  Instead we use exec to create a new function
     # with an empty body, meaning it has the same performance as
     # as just calling a function.
-    if not inspect.isfunction(fun) and hasattr(fun, '__call__'):
+    is_function = inspect.isfunction(fun)
+    is_callable = hasattr(fun, '__call__')
+    is_method = inspect.ismethod(fun)
+
+    if not is_function and is_callable and not is_method:
         name, fun = fun.__class__.__name__, fun.__call__
     else:
         name = fun.__name__
